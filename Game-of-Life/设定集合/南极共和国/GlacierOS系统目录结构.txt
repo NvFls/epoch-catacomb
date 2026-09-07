@@ -1,0 +1,72 @@
+# GlacierOS 系统目录结构
+
+## 设计原则
+- 0盘为系统盘
+- 路径不包含":"分隔符
+- GFS去重机制在底层对所有逻辑文件只存一份相同物理副本
+- 系统核心文件归FileService保护
+- PascalCase命名风格——长串单词、首字母大写、见名知义
+
+## 完整目录树
+```
+0:\
+├── Glacier\
+│   ├── Kernel\
+│   │   ├── Core\                   ← CPU调度、内存管理、FI微码、中断处理
+│   │   ├── IPC\                    ← 内核IPC通道 + SRM安全引用监视器
+│   │   ├── Communication\          ← ZP/ETE/ST协议栈内核实现
+│   │   ├── GFS\                    ← 文件系统（内核态）
+│   │   ├── RealTimeDrivers\        ← 脑机接口、伺服电机、反重力磁场等实时驱动
+│   │   ├── HAL\                    ← FI芯片硬件抽象层
+│   │   └── SwapFile.dat            ← 虚拟内存交换文件，固定大小，GFS不做去重
+│   ├── Interfaces\                 ← 内核暴露给用户态的系统调用接口层
+│   │   ├── IPC\                    ← IPC客户端封装
+│   │   ├── Security\               ← 安全描述符API、ACL管理
+│   │   ├── Communication\          ← ZP/ETE/ST的应用程序调用接口
+│   │   ├── TokenRegistry\          ← 令牌注册表查询和管理接口
+│   │   └── GFS\                    ← 文件系统调用接口
+│   ├── Foundation\                 ← C++标准库、FI硬件抽象、基础类型（纯用户态）
+│   ├── Drivers\User\               ← 用户态设备驱动（崩了重启，不伤内核）
+│   ├── Boot\                       ← 启动引导+FI固件
+│   ├── Logs\                       ← 审计日志，内核只追加写入
+│   ├── Config\                     ← 系统配置（相当于Windows注册表）
+│   │   ├── Global\                 ← 全局系统配置
+│   │   └── LaunchTokenConfig\      ← 应用程序启动令牌配置目录
+│   │       └── <AppTokenName>\     ← TokenAppName锁自己的小房子
+│   └── Temp\                       ← 系统临时文件
+├── Users\
+│   ├── Public\
+│   │   └── Applications\           ← 所有用户共享的应用
+│   ├── <UserSID>\
+│   │   ├── Applications\           ← 该用户自己安装的应用
+│   │   └── TokenCache\             ← 该用户临时持有的令牌缓存
+│   └── <AnotherSID>\
+└── ...
+```
+
+## 关键目录说明
+
+### Kernel\ 与 Interfaces\ 的边界
+- `Kernel\`里面的全是内核态运行的、崩了系统挂的东西
+- `Interfaces\`是内核暴露给用户态程序的调用入口——用户态程序不直接碰`Kernel\`，全通过`Interfaces\`下的封装库来调系统功能
+
+### Logs\
+- 内核IPC层每做一次权限判定（通过或拒绝），当场追加一条记录
+- 日志有生存时间，系统默认保留三年，到期自动回收空间
+- 管理员可配置保留周期，但不能低于最低法定时限
+- 持有`SeAuditLogDeleteToken`的管理员可手动触发清理——但清理操作本身也被记入日志
+- 底线：删了也能被追查是谁删的、删了什么时间段
+
+### SwapFile.dat
+- 固定大小，系统安装时设定（最小=物理内存，建议=物理内存 x 2）
+- 由内核内存管理模块直接管理，不受用户权限令牌控制
+- GFS对该文件不做去重
+
+### LaunchTokenConfig\
+- 受`TokenAppStartFileDirectoryControl`保护——管理员开门
+- 各应用用自己注册的同名令牌（如`TokenMyApp`）锁自己的配置条目
+- 管理员有大院子钥匙但打不开任何一扇小门
+
+### Applications\
+- 按用户隔离——你装的应用和邻居装的应用互不干扰
+- `Public\Applications\`是系统级共享应用，所有用户都能用

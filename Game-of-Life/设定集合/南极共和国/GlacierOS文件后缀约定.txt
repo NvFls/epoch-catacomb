@@ -1,0 +1,18 @@
+# GlacierOS 文件后缀约定
+
+## 设计原则
+- 与 GlacierOS 自己的技术栈保持一致
+- 不与已有系统后缀撞名
+
+## 基础后缀
+- `.gex`——Glacier Executable，可执行文件。FI指令集二进制，G-ELF头部，标记入口点、依赖的动态库、需要的令牌列表。相当于Windows `.exe`
+- `.dyn`——动态共享库，运行时加载。相当于Windows `.dll`、Linux `.so`
+- `.lib`——静态库，编译时链接，不独立运行。全球通用
+- `.kml`——Kernel Module Loadable，可加载内核模块。加载进`Kernel\`的代码
+- `.cfg`——配置文件，纯文本或GFS元数据格式
+- `.log`——日志文件，全球统一不改
+- `.obj`——编译中间对象文件，未链接的二进制
+
+## 说明
+- 南极开发者（帝企鹅、猩猩、金丝猴、硅基节点）双击`.gex`，内核读取可执行文件头，从`LaunchTokenConfig\`获取该应用令牌配置，签发令牌组，启动进程
+- `.kml`加载前须经SRM校验调用者持有对应令牌（如`SeDriverLoadToken`），恶意软件无法直接加载内核模块

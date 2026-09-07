@@ -1,0 +1,22 @@
+    OldWorldAPI这个项目在南极，可以说是非常古老、经典了。这个东西在早期甚至是GlacierOS的必装应用。
+    OldWorldAPI并不是任何容器技术，也不是虚拟机，只是一个运行在GlacierOS上的程序，为旧世界的那些软件提供运行翻译服务。
+    OldWorldAPI有以下模块：
+    指令集翻译部分：
+    Translate-x86
+    Translate-Arm
+    指令集翻译经过了南极无数开发者前所未有的大量优化，哪怕仅仅是软件层面的指令集翻译，其性能也远远超过原生的x86和arm架构。
+    操作系统API翻译模块（OSAPI模块）：
+    Translate-WIN32
+    Translate-Linux
+    对于OldWorldAPI1.12.2以后的版本，在Translate-Linux模块中增加了可选安装模块Translate-Android模块。
+    
+    指令集翻译模块和OSAPI模块之间严格分离，指令集翻译和OSAPI模块的内部模块之间也严格分离，用户可以根据自己的情况选择安装。
+    
+    OSAPI模块需要通过各种手段拦截其他操作系统程序的API调用，然后进行理解和翻译。
+    
+    对于OSAPI模块要做的不是简单的API映射，而是“理解程序的意图，并且翻译成GlacierOS能够理解的话”。比如一个windows程序用RegCreateKeyEx向\HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run写入自己的路径，OldWorldAPI会先拦截其API请求，然后将其理解为“这个程序想要开机启动”，然后向“0:\Glaceir\System\<用户名>\config\start.ini”中写入这个windows程序的地址。OldWorldAPI会把自己嵌入系统内核，确保这个windows程序真的可以开机启动。
+    
+    OldWorldAPI的另一个配置核心是“根目录对齐”，这一点是强制要求。OldWorldAPI强制要求GlacierOS的根目录与其他操作系统的根目录进行对齐，这一点配置对于文件读写类的API翻译非常重要。比如对于Translate-Win32模块来说，用户必须指定GlacierOS上的一个盘（比如1盘）与windows上的C盘对应。
+    这里我举一个例子，比如一个windows程序希望把自己复制到“c:\user”目录下。首先，OldWorldAPI拦截了这个windows程序的请求，然后理解这个应用程序的意图：想要把自己复制到一个叫做“c:\user”的地方。然后检查映射规则，发现1盘对应windows中的c盘，然后把其中的“c”替换为“1”。最后，OldWorldAPI会把这个程序复制到“1:\user目录下”
+    对于应用请求权限的问题，OldWorldAPI会“放大翻译，用户裁决”。比如一个windows程序请求管理员权限，OldWorldAPI会发现，GlaclerOS上的Administrator权限要比windows上的管理员权限要小一点。为了保障程序的正常运行，OldWorldAPI会为这个windows应用请求更高的SYSTEM权限，当然给不给最终还是由用户裁决。
+    南极国产的FI架构芯片于1.8版本后支持硬件级别的指令集翻译，包括翻译x86和arm，而且同样经过了大量优化，性能也远远超越原生的x86和arm。

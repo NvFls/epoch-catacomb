@@ -1,0 +1,158 @@
+# GlacierOS GUI - 创建窗口
+
+## 设计原则
+- GUI子系统在用户态运行（`Drivers\User\GUI\`），崩溃可重启，不伤内核
+- 窗口是对象，通过`CALLTOKEN`（句柄）管理
+- 窗口类注册使用整数ID，窗口管理器用哈希表查ID——比字符串快
+- 消息称为"消息令牌"，前缀`MS_`
+
+## 基本流程
+
+### 1. 获取空闲窗口ID
+```cpp
+#include <GlacierAPI.h>
+
+WinIDRange range;
+GetSpareWinID(&range);
+// range.IDSpaceMin 被自动标记为占用
+// 不需要检查冲突——GetSpareWinID()已锁定此ID
+```
+
+### 2. 注册窗口类
+```cpp
+LRESULT CALLBACK WindowProc(CALLTOKEN hWinUI, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+    switch (msg)
+    {
+    case MS_PAINT:
+        return 0;
+    case MS_CLOSE:
+        CloseWinUI(hWinUI);
+        return 0;
+    }
+    return DefaultWinUIProc(hWinUI, msg, wParam, lParam);
+}
+
+WinUIClass wc = {0};
+wc.ClassID        = range.IDSpaceMin;
+wc.lpfnWinUIProc  = WindowProc;
+
+RegisterWinUIClass(&wc);
+```
+
+### 3. 创建窗口
+```cpp
+CALLTOKEN hWinUI = CreateWinUI(
+    wc.ClassID,
+    "窗口标题",
+    WINS_OVERLAPPEDWINDOW,
+    CW_USEDEFAULT, CW_USEDEFAULT,
+    800, 600,
+    NULL, NULL, NULL, NULL
+);
+```
+
+### 4. 显示窗口
+```cpp
+ShowWinUI(hWinUI, SW_SHOW);
+```
+
+### 5. 消息循环
+```cpp
+MSG msg;
+while (GetMessage(&msg, NULL, 0, 0))
+{
+    TranslateMessage(&msg);
+    DispatchMessage(&msg);
+}
+```
+
+### 6. 清理
+```cpp
+CloseWinUI(hWinUI);              // 销毁窗口，回收CALLTOKEN
+WinIDFree(range.IDSpaceMin);     // 释放窗口ID
+```
+
+## 完整示例
+```cpp
+#include <GlacierAPI.h>
+
+LRESULT CALLBACK WindowProc(CALLTOKEN hWinUI, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+    switch (msg)
+    {
+    case MS_PAINT:
+        return 0;
+    case MS_CLOSE:
+        CloseWinUI(hWinUI);
+        return 0;
+    }
+    return DefaultWinUIProc(hWinUI, msg, wParam, lParam);
+}
+
+int main()
+{
+    WinIDRange range;
+    GetSpareWinID(&range);
+
+    WinUIClass wc = {0};
+    wc.ClassID        = range.IDSpaceMin;
+    wc.lpfnWinUIProc  = WindowProc;
+    RegisterWinUIClass(&wc);
+
+    CALLTOKEN hWinUI = CreateWinUI(
+        wc.ClassID, "窗口标题",
+        WINS_OVERLAPPEDWINDOW,
+        CW_USEDEFAULT, CW_USEDEFAULT, 800, 600,
+        NULL, NULL, NULL, NULL
+    );
+
+    ShowWinUI(hWinUI, SW_SHOW);
+
+    MSG msg;
+    while (GetMessage(&msg, NULL, 0, 0))
+    {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
+
+    CloseWinUI(hWinUI);
+    WinIDFree(range.IDSpaceMin);
+    return 0;
+}
+```
+
+## API说明
+
+| API | 功能 |
+|-----|------|
+| `GetSpareWinID(WinIDRange*)` | 申请空闲窗口ID范围并锁定，调用即标记占用 |
+| `WinIDFree(WinUIID)` | 释放之前锁定的窗口ID |
+| `RegisterWinUIClass(WinUIClass*)` | 向窗口管理器注册窗口类 |
+| `CreateWinUI(...)` | 创建窗口实例，返回 `CALLTOKEN` |
+| `ShowWinUI(CALLTOKEN, int)` | 显示窗口 |
+| `GetMessage(MSG*, ...)` | 从消息队列获取下一条消息 |
+| `TranslateMessage(MSG*)` | 翻译键盘消息 |
+| `DispatchMessage(MSG*)` | 分发消息到对应窗口的过程 |
+| `CloseWinUI(CALLTOKEN)` | 关闭窗口，回收 `CALLTOKEN` |
+| `DefaultWinUIProc(...)` | 默认消息处理 |
+| `WindowProc(...)` | 用户定义的窗口过程回调 |
+
+## 类型说明
+
+| 类型 | 含义 |
+|------|------|
+| `CALLTOKEN` | 调用令牌（句柄）——操作窗口对象的凭证 |
+| `WinIDRange` | 空闲窗口ID范围结构（`IDSpaceMin`、`IDSpaceMax`） |
+| `WinUIClass` | 窗口类结构（`ClassID`、`lpfnWinUIProc`） |
+| `MSG` | 消息结构 |
+| `WPARAM` / `LPARAM` | 消息参数 |
+| `LRESULT` | 窗口过程返回值 |
+
+## 消息令牌（部分）
+- `MS_PAINT`：窗口需要重绘
+- `MS_CLOSE`：窗口被请求关闭
+
+## 窗口回收
+- 开发者主动调用 `WinIDFree`——最佳实践
+- 忘记调用或进程崩溃——内核扫尾，回收该进程持有的所有`CALLTOKEN`和窗口ID
