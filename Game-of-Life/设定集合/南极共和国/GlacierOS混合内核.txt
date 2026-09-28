@@ -76,6 +76,19 @@
 - 安全边界不在文件路径——在内核API
 - 内核不关心`.kml`在哪个盘哪个目录，只关心调用者有没有令牌、驱动有没有通过完整性校验
 
+## 启动流程
+
+唤醒链：GlacierBootloader → Loadkernel.gex → 内核 → session.gex。
+
+1. GlacierBootloader 唤醒 Loadkernel.gex。
+2. Loadkernel 逐步载入操作系统内核。
+3. 内核唤醒 session.gex。
+4. 已知的劫持面：一些病毒或硅基公民会劫持 session.gex 的唤醒，先唤醒自己，再唤醒 session.gex。
+
+注（据《信息体系底层逻辑》“结构性开放”一节）：南极每一台设备的 bootloader 不验签、不查 eFuse、不熔断，因此启动环节的劫持无法用签名拦下。
+
+其余待补：Loadkernel 是否同时唤醒多个进程分头载入内核各部分；FI 固件在其中担当什么；初始令牌在哪一步、由谁发出。
+
 ## 用户态
 
 ### Foundation\
